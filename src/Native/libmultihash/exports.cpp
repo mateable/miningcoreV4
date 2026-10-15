@@ -26,6 +26,8 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "skein.h"
 #include "skein2.h"
 #include "x11.h"
+#include "balloon.h"
+#include "whirlpool.h"
 #include "groestl.h"
 #include "blake.h"
 #include "fugue.h"
@@ -147,6 +149,16 @@ extern "C" MODULE_API void phi2_export(const char* input, char* output, uint32_t
 extern "C" MODULE_API void x11_export(const char* input, char* output, uint32_t input_len)
 {
 	x11_hash(input, output, input_len);
+}
+
+extern "C" MODULE_API void balloon_export(const char* input, char* output, uint32_t input_len)
+{
+	balloon_hash(input, output, input_len);
+}
+
+extern "C" MODULE_API void whirlpool_export(const char* input, char* output, uint32_t input_len)
+{
+	whirlpool_hash(input, output, input_len);
 }
 
 extern "C" MODULE_API void x13_export(const char* input, char* output, uint32_t input_len)

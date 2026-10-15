@@ -1,0 +1,803 @@
+diff --git a/BALLOON_WHIRLPOOL.md b/BALLOON_WHIRLPOOL.md
+new file mode 100644
+index 0000000..9ba344f
+--- /dev/null
++++ b/BALLOON_WHIRLPOOL.md
+@@ -0,0 +1,97 @@
++# MateableCoin (MTBC) support: Balloon + Whirlpool
++
++This adds two PoW algorithms, `balloon` and `whirlpool`, so this pool
++software can run stratum pools for MateableCoin (MTBC) on either algo.
++
++Built and tested end-to-end against a real, fully synced MTBC node: native
++lib builds clean, the C# side builds clean (`dotnet build`, 0 errors), and
++real miners (cpuminer-opt, `-a balloon` / `-a whirlpool`) connected to a
++pool instance running this code and got thousands of real shares accepted,
++correctly recorded in Postgres. Block-found + payout behavior was not
++exercised (that needs a real block, or faking one — neither was done here).
++
++## What changed
++
++- `src/Miningcore/Crypto/Hashing/Algorithms/Balloon.cs`,
++  `Whirlpool.cs` — new hash algorithm wrapper classes.
++- `src/Miningcore/Native/Multihash.cs` — two new `DllImport` declarations.
++- `src/Native/libmultihash/balloon.c`, `balloon.h` — native Balloon hash.
++  Same source already used in production by MTBC's own YIIMP-based pool —
++  dropped in unmodified, since its function signature
++  (`void balloon_hash(const char* input, char* output, uint32_t len)`)
++  already matches what this repo's native exports expect.
++- `src/Native/libmultihash/whirlpool.c`, `whirlpool.h` — native Whirlpool
++  hash. This repo already ships the underlying `sph_whirlpool` primitive
++  (used internally by other composite algos like x16r) — confirmed
++  byte-identical to MateableCoin's own copy of the same file before writing
++  this wrapper. `whirlpool.c` is new, but it's a direct mirror of
++  MateableCoin's own `src/crypto/whirlpool/whirlpool.c`: four chained passes
++  of `sph_whirlpool1` (the final/corrected NESSIE variant). Confirm this
++  against your own copy of the MateableCoin node source if you want to
++  double check it yourself.
++- `src/Native/libmultihash/exports.cpp`, `Makefile` — wiring for both
++  natives (`-lssl -lcrypto` added to `LDLIBS` since Balloon needs OpenSSL's
++  AES/EVP).
++- `src/Miningcore/coins.json` — two new coin templates:
++  `mateablecoin-balloon`, `mateablecoin-whirlpool`.
++- `src/Miningcore/Stratum/StratumServer.cs` — one-line bugfix, unrelated to
++  MTBC specifically (see below).
++- `examples/mateablecoin_balloon_whirlpool_pool.json` — example pool config
++  for both algos, placeholders for your own daemon/wallet details.
++
++## Building
++
++This repo does **not** auto-build native libs as part of `dotnet build`
++(that MSBuild target is commented out in `Miningcore.csproj` on purpose, to
++keep day-to-day builds fast). Build the native lib yourself:
++```
++cd src/Native/libmultihash && make clean && make
++```
++then copy the resulting `libmultihash.so` into your actual output/publish
++directory alongside the other native `.so` files — or run
++`src/Miningcore/build-libs-linux.sh <outdir>` to rebuild everything at once
++(takes much longer, since it also builds RandomX and friends from source).
++
++Also needs `git fetch --unshallow` if you cloned with `--depth 1` — the
++build's GitVersion step walks git history and fails on a shallow clone.
++
++## The one non-obvious gotcha: `getblocktemplate` needs an extra `algo` param
++
++MateableCoin's daemon takes **a second positional parameter** on
++`getblocktemplate` naming which algorithm to build a template for (`scrypt`,
++`yescrypt`, `whirlpool`, `ghostrider`, `balloon`) — see `src/rpc/mining.cpp`
++in the MateableCoin node source to confirm. Without it, the daemon silently
++defaults to whatever its current global algo is (observed as `scrypt`
++during testing) and you'd get templates for the wrong algorithm with no
++error.
++
++This repo already has an extension point for exactly this: `gbtArgs` in the
++pool config (`BitcoinPoolConfigExtra.GBTArgs`), which overrides the entire
++params array sent with `getblocktemplate`. Already set in the example
++config:
++```json
++"gbtArgs": [{"rules": ["segwit"]}, "balloon"]
++```
++(or `"whirlpool"` for the other pool). No code changes needed for this part.
++
++## Bonus fix: a real NullReferenceException bug
++
++While testing, every single stratum connection initially failed with:
++```
++System.NullReferenceException: Object reference not set to an instance of an object.
++   at Miningcore.Stratum.StratumServer.Listen(...) in .../StratumServer.cs:line 131
++```
++Cause: `SetupBanManagement()` (in `Mining/PoolBase.cs`) only assigns
++`banManager` when `poolConfig.Banning.Enabled == true` — by design, every
++other call site in `StratumServer.cs` correctly null-guards with
++`banManager?.`, except this one, which called `banManager.ThrottleConnect(...)`
++directly. Any pool with per-pool banning disabled hit this on every
++connection attempt (the client just saw `stratum_subscribe timed out` with
++no indication why). Fixed here with the missing `?.` — unrelated to MTBC,
++just something found along the way.
++
++## If your daemon runs multiple wallets (multiwallet mode)
++
++If your MTBC node serves more than one wallet as separate HTTP paths (e.g.
++`/wallet/pool`), set `httpPath` in the daemon config block accordingly. If
++your daemon just runs a single default wallet, remove the `httpPath` line.
+diff --git a/examples/mateablecoin_balloon_whirlpool_pool.json b/examples/mateablecoin_balloon_whirlpool_pool.json
+new file mode 100644
+index 0000000..91e984e
+--- /dev/null
++++ b/examples/mateablecoin_balloon_whirlpool_pool.json
+@@ -0,0 +1,134 @@
++{
++    "logging": {
++        "level": "info",
++        "enableConsoleLog": true,
++        "enableConsoleColors": true,
++        "logFile": "",
++        "apiLogFile": "",
++        "logBaseDirectory": "",
++        "perPoolLogFile": false
++    },
++    "banning": {
++        "manager": "Integrated",
++        "banOnJunkReceive": true,
++        "banOnInvalidShares": false
++    },
++    "notifications": {
++        "enabled": false
++    },
++    "persistence": {
++        "postgres": {
++            "host": "127.0.0.1",
++            "port": 5432,
++            "user": "miningcore",
++            "password": "password",
++            "database": "miningcore"
++        }
++    },
++    "paymentProcessing": {
++        "enabled": true,
++        "interval": 600,
++        "shareRecoveryFile": "recovered-shares.txt"
++    },
++    "api": {
++        "enabled": true,
++        "listenAddress": "*",
++        "port": 4000
++    },
++    "pools": [
++        {
++            "id": "mtbc-balloon",
++            "enabled": true,
++            "coin": "mateablecoin-balloon",
++            "address": "YOUR_MTBC_POOL_WALLET_ADDRESS",
++            "rewardRecipients": [],
++            "blockRefreshInterval": 1000,
++            "jobRebroadcastTimeout": 10,
++            "clientConnectionTimeout": 600,
++            "banning": {
++                "enabled": true,
++                "time": 600,
++                "invalidPercent": 50,
++                "checkThreshold": 50
++            },
++            "gbtArgs": [{"rules": ["segwit"]}, "balloon"],
++            "ports": {
++                "3256": {
++                    "listenAddress": "0.0.0.0",
++                    "difficulty": 0.001,
++                    "name": "balloon",
++                    "varDiff": {
++                        "minDiff": 0.0001,
++                        "targetTime": 15,
++                        "retargetTime": 90,
++                        "variancePercent": 30
++                    }
++                }
++            },
++            "daemons": [
++                {
++                    "host": "YOUR_MTBC_NODE_HOST",
++                    "port": 6966,
++                    "user": "YOUR_RPC_USER",
++                    "password": "YOUR_RPC_PASSWORD",
++                    "httpPath": "/wallet/YOUR_WALLET_NAME"
++                }
++            ],
++            "paymentProcessing": {
++                "enabled": true,
++                "minimumPayment": 0.5,
++                "payoutScheme": "PPLNS",
++                "payoutSchemeConfig": {
++                    "factor": 2.0
++                }
++            }
++        },
++        {
++            "id": "mtbc-whirlpool",
++            "enabled": true,
++            "coin": "mateablecoin-whirlpool",
++            "address": "YOUR_MTBC_POOL_WALLET_ADDRESS",
++            "rewardRecipients": [],
++            "blockRefreshInterval": 1000,
++            "jobRebroadcastTimeout": 10,
++            "clientConnectionTimeout": 600,
++            "banning": {
++                "enabled": true,
++                "time": 600,
++                "invalidPercent": 50,
++                "checkThreshold": 50
++            },
++            "gbtArgs": [{"rules": ["segwit"]}, "whirlpool"],
++            "ports": {
++                "3257": {
++                    "listenAddress": "0.0.0.0",
++                    "difficulty": 0.01,
++                    "name": "whirlpool",
++                    "varDiff": {
++                        "minDiff": 0.001,
++                        "targetTime": 15,
++                        "retargetTime": 90,
++                        "variancePercent": 30
++                    }
++                }
++            },
++            "daemons": [
++                {
++                    "host": "YOUR_MTBC_NODE_HOST",
++                    "port": 6966,
++                    "user": "YOUR_RPC_USER",
++                    "password": "YOUR_RPC_PASSWORD",
++                    "httpPath": "/wallet/YOUR_WALLET_NAME"
++                }
++            ],
++            "paymentProcessing": {
++                "enabled": true,
++                "minimumPayment": 0.5,
++                "payoutScheme": "PPLNS",
++                "payoutSchemeConfig": {
++                    "factor": 2.0
++                }
++            }
++        }
++    ]
++}
+diff --git a/src/Miningcore/Crypto/Hashing/Algorithms/Balloon.cs b/src/Miningcore/Crypto/Hashing/Algorithms/Balloon.cs
+new file mode 100644
+index 0000000..3fc1b47
+--- /dev/null
++++ b/src/Miningcore/Crypto/Hashing/Algorithms/Balloon.cs
+@@ -0,0 +1,21 @@
++using Miningcore.Contracts;
++using Miningcore.Native;
++
++namespace Miningcore.Crypto.Hashing.Algorithms;
++
++[Identifier("balloon")]
++public unsafe class Balloon : IHashAlgorithm
++{
++    public void Digest(ReadOnlySpan<byte> data, Span<byte> result, params object[] extra)
++    {
++        Contract.Requires<ArgumentException>(result.Length >= 32);
++
++        fixed (byte* input = data)
++        {
++            fixed (byte* output = result)
++            {
++                Multihash.balloon(input, output, (uint) data.Length);
++            }
++        }
++    }
++}
+diff --git a/src/Miningcore/Crypto/Hashing/Algorithms/Whirlpool.cs b/src/Miningcore/Crypto/Hashing/Algorithms/Whirlpool.cs
+new file mode 100644
+index 0000000..686a0f5
+--- /dev/null
++++ b/src/Miningcore/Crypto/Hashing/Algorithms/Whirlpool.cs
+@@ -0,0 +1,21 @@
++using Miningcore.Contracts;
++using Miningcore.Native;
++
++namespace Miningcore.Crypto.Hashing.Algorithms;
++
++[Identifier("whirlpool")]
++public unsafe class Whirlpool : IHashAlgorithm
++{
++    public void Digest(ReadOnlySpan<byte> data, Span<byte> result, params object[] extra)
++    {
++        Contract.Requires<ArgumentException>(result.Length >= 32);
++
++        fixed (byte* input = data)
++        {
++            fixed (byte* output = result)
++            {
++                Multihash.whirlpool(input, output, (uint) data.Length);
++            }
++        }
++    }
++}
+diff --git a/src/Miningcore/Native/Multihash.cs b/src/Miningcore/Native/Multihash.cs
+index f2f2901..c354370 100644
+--- a/src/Miningcore/Native/Multihash.cs
++++ b/src/Miningcore/Native/Multihash.cs
+@@ -43,6 +43,12 @@ public static unsafe class Multihash
+     [DllImport("libmultihash", EntryPoint = "x11_export", CallingConvention = CallingConvention.Cdecl)]
+     public static extern void x11(byte* input, void* output, uint inputLength);
+ 
++    [DllImport("libmultihash", EntryPoint = "balloon_export", CallingConvention = CallingConvention.Cdecl)]
++    public static extern void balloon(byte* input, void* output, uint inputLength);
++
++    [DllImport("libmultihash", EntryPoint = "whirlpool_export", CallingConvention = CallingConvention.Cdecl)]
++    public static extern void whirlpool(byte* input, void* output, uint inputLength);
++
+     [DllImport("libmultihash", EntryPoint = "x13_export", CallingConvention = CallingConvention.Cdecl)]
+     public static extern void x13(byte* input, void* output, uint inputLength);
+ 
+diff --git a/src/Miningcore/Stratum/StratumServer.cs b/src/Miningcore/Stratum/StratumServer.cs
+index b69c166..db73a1c 100644
+--- a/src/Miningcore/Stratum/StratumServer.cs
++++ b/src/Miningcore/Stratum/StratumServer.cs
+@@ -128,7 +128,7 @@ public abstract class StratumServer
+                 var socket = await server.AcceptAsync(ct);
+ 
+                 var remoteEndpoint = socket.RemoteEndPoint as IPEndPoint;
+-                if(remoteEndpoint != null && !banManager.ThrottleConnect(remoteEndpoint.Address))
++                if(remoteEndpoint != null && banManager?.ThrottleConnect(remoteEndpoint.Address) == false)
+                 {
+                     socket.Close();
+                     continue;
+diff --git a/src/Miningcore/coins.json b/src/Miningcore/coins.json
+index 0794247..059f6f8 100644
+--- a/src/Miningcore/coins.json
++++ b/src/Miningcore/coins.json
+@@ -8531,5 +8531,61 @@
+     "explorerBlockLink": "",
+     "explorerTxLink": "",
+     "explorerAccountLink": ""
++  },
++  "mateablecoin-balloon": {
++    "name": "MateableCoin",
++    "canonicalName": "MateableCoin (Balloon)",
++    "symbol": "MTBC",
++    "family": "bitcoin",
++    "website": "https://mateable.com/",
++    "market": "",
++    "twitter": "",
++    "telegram": "",
++    "discord": "",
++    "coinbaseHasher": {
++      "hash": "sha256d"
++    },
++    "headerHasher": {
++      "hash": "balloon"
++    },
++    "blockHasher": {
++      "hash": "reverse",
++      "args": [
++        {
++          "hash": "sha256d"
++        }
++      ]
++    },
++    "explorerBlockLink": "",
++    "explorerTxLink": "",
++    "explorerAccountLink": ""
++  },
++  "mateablecoin-whirlpool": {
++    "name": "MateableCoin",
++    "canonicalName": "MateableCoin (Whirlpool)",
++    "symbol": "MTBC",
++    "family": "bitcoin",
++    "website": "https://mateable.com/",
++    "market": "",
++    "twitter": "",
++    "telegram": "",
++    "discord": "",
++    "coinbaseHasher": {
++      "hash": "sha256d"
++    },
++    "headerHasher": {
++      "hash": "whirlpool"
++    },
++    "blockHasher": {
++      "hash": "reverse",
++      "args": [
++        {
++          "hash": "sha256d"
++        }
++      ]
++    },
++    "explorerBlockLink": "",
++    "explorerTxLink": "",
++    "explorerAccountLink": ""
+   }
+ }
+diff --git a/src/Native/libmultihash/Makefile b/src/Native/libmultihash/Makefile
+index 5ebc1ef..07a6dbb 100644
+--- a/src/Native/libmultihash/Makefile
++++ b/src/Native/libmultihash/Makefile
+@@ -1,10 +1,10 @@
+ CFLAGS = -g -Wall -c -fPIC -O2 -Wno-pointer-sign -Wno-char-subscripts -Wno-unused-variable -Wno-unused-function -Wno-strict-aliasing -Wno-discarded-qualifiers -Wno-unused-const-variable $(CPU_FLAGS) $(HAVE_FEATURE)
+ CXXFLAGS = -g -Wall -fPIC -fpermissive -O2 -Wno-char-subscripts -Wno-unused-variable -Wno-unused-function -Wno-strict-aliasing -Wno-sign-compare -std=c++11 $(CPU_FLAGS) $(HAVE_FEATURE)
+ LDFLAGS = -shared
+-LDLIBS = -lsodium
++LDLIBS = -lsodium -lssl -lcrypto
+ TARGET  = libmultihash.so
+ 
+-OBJECTS = bcrypt.o blake.o c11.o dcrypt.o fresh.o lane.o \
++OBJECTS = bcrypt.o blake.o balloon.o whirlpool.o c11.o dcrypt.o fresh.o lane.o \
+ 	fugue.o groestl.o hefty1.o jh.o keccak.o keccak512.o neoscrypt.o exports.o nist5.o quark.o qubit.o s3.o scryptn.o \
+ 	sha256csm.o hmq17.o phi.o phi2.o \
+ 	sha3/aes_helper.o sha3/hamsi.o sha3/hamsi_helper.o sha3/sph_blake.o sha3/sph_bmw.o sha3/sph_cubehash.o \
+diff --git a/src/Native/libmultihash/balloon.c b/src/Native/libmultihash/balloon.c
+new file mode 100644
+index 0000000..badc457
+--- /dev/null
++++ b/src/Native/libmultihash/balloon.c
+@@ -0,0 +1,213 @@
++#include <stdbool.h>
++#include <stdint.h>
++#include <stddef.h>
++#include <string.h>
++#include <openssl/aes.h>
++#include <openssl/evp.h>
++#include "sha256.h"
++#include "balloon.h"
++
++#define MIN(a, b) (((a) < (b)) ? (a) : (b))
++
++#ifdef __cplusplus
++extern "C"{
++#endif
++
++static void balloon_init (struct balloon_options *opts, int64_t s_cost, int32_t t_cost) {
++  opts->s_cost = s_cost;
++  opts->t_cost = t_cost;
++}
++
++void balloon_hash (const char* input, char* output, uint32_t len) {
++  balloon ((unsigned char *)input, (unsigned char *)output, len, 128, 4);
++}
++
++void balloon (unsigned char *input, unsigned char *output, int32_t len, int64_t s_cost, int32_t t_cost) {
++  struct balloon_options opts;
++  struct hash_state s;
++  balloon_init (&opts, s_cost, t_cost);
++  hash_state_init (&s, &opts, input);
++  hash_state_fill (&s, input, input, len);
++  hash_state_mix (&s, t_cost);
++  hash_state_extract (&s, output);
++  hash_state_free (&s);
++}
++
++int bitstream_init (struct bitstream *b) {
++  SHA256_Init(&b->c);
++  b->initialized = false;
++#if   OPENSSL_VERSION_NUMBER >= 0x10100000L
++  b->ctx = EVP_CIPHER_CTX_new();
++  EVP_CIPHER_CTX_init(b->ctx);
++#else
++  EVP_CIPHER_CTX_init (&b->ctx);
++#endif
++  b->zeros = malloc (BITSTREAM_BUF_SIZE * sizeof (uint8_t));
++  memset (b->zeros, 0, BITSTREAM_BUF_SIZE);
++}
++
++int bitstream_free (struct bitstream *b) {
++  uint8_t out[AES_BLOCK_SIZE];
++  int outl;
++#if   OPENSSL_VERSION_NUMBER >= 0x10100000L
++  EVP_EncryptFinal (b->ctx, out, &outl);
++  EVP_CIPHER_CTX_cleanup (b->ctx);
++  EVP_CIPHER_CTX_free(b->ctx);
++#else
++  EVP_EncryptFinal (&b->ctx, out, &outl);
++  EVP_CIPHER_CTX_cleanup (&b->ctx);
++#endif
++  free (b->zeros);
++}
++
++int bitstream_seed_add (struct bitstream *b, const void *seed, size_t seedlen) {
++  SHA256_Update(&b->c, seed, seedlen);
++}
++
++int bitstream_seed_finalize (struct bitstream *b) {
++  uint8_t key_bytes[32];
++  SHA256_Final (key_bytes, &b->c);
++  uint8_t iv[AES_BLOCK_SIZE];
++  memset (iv, 0, AES_BLOCK_SIZE);
++#if   OPENSSL_VERSION_NUMBER >= 0x10100000L
++  EVP_CIPHER_CTX_set_padding (b->ctx, 1);
++  EVP_EncryptInit (b->ctx, EVP_aes_128_ctr (), key_bytes, iv);
++#else
++  EVP_CIPHER_CTX_set_padding (&b->ctx, 1);
++  EVP_EncryptInit (&b->ctx, EVP_aes_128_ctr (), key_bytes, iv);
++#endif
++  b->initialized = true;
++}
++
++static int encrypt_partial (struct bitstream *b, void *outp, int to_encrypt) {
++  int encl;
++#if   OPENSSL_VERSION_NUMBER >= 0x10100000L
++  EVP_EncryptUpdate (b->ctx, outp, &encl, b->zeros, to_encrypt);
++#else
++  EVP_EncryptUpdate (&b->ctx, outp, &encl, b->zeros, to_encrypt);
++#endif
++}
++
++int bitstream_fill_buffer (struct bitstream *b, void *out, size_t outlen) {
++  size_t total = 0;
++  while (total < outlen) {
++    const int to_encrypt = MIN(outlen - total, BITSTREAM_BUF_SIZE);
++    encrypt_partial (b, out + total, to_encrypt);
++    total += to_encrypt;
++  }
++}
++
++int compressb (uint64_t *counter, uint8_t *out, const uint8_t *blocks[], size_t blocks_to_comp) {
++  unsigned int i;
++  SHA256_CTX ctx;
++  SHA256_Init (&ctx);
++  SHA256_Update (&ctx, counter, 8);
++  for (i = 0; i < blocks_to_comp; i++)
++    SHA256_Update (&ctx, blocks[i], BLOCK_SIZE);
++  SHA256_Final (out, &ctx);
++  *counter += 1;
++}
++
++int expand (uint64_t *counter, uint8_t *buf, size_t blocks_in_buf) {
++  size_t i;
++  const uint8_t *blocks[1] = { buf };
++  uint8_t *cur = buf + BLOCK_SIZE;
++  for (i = 1; i < blocks_in_buf; i++) {
++    compressb (counter, cur, blocks, 1);
++    blocks[0] += BLOCK_SIZE;
++    cur += BLOCK_SIZE;
++  }
++}
++
++uint64_t bytes_to_littleend_uint64 (const uint8_t *bytes, size_t n_bytes) {
++  int i;
++  if (n_bytes > 8)
++    n_bytes = 8;
++  uint64_t out = 0;
++  for (i = n_bytes-1; i >= 0; i--) {
++    out <<= 8;
++    out |= bytes[i];
++  }
++  return out;
++}
++
++void * block_index (const struct hash_state *s, size_t i) {
++  return s->buffer + (BLOCK_SIZE * i);
++}
++
++static uint64_t options_n_blocks (const struct balloon_options *opts) {
++  const uint32_t bsize = BLOCK_SIZE;
++  uint64_t ret = (opts->s_cost * 1024) / bsize;
++  return (ret < BLOCKS_MIN) ? BLOCKS_MIN : ret;
++}
++
++void * block_last (const struct hash_state *s) {
++  return block_index (s, s->n_blocks - 1);
++}
++
++int hash_state_init (struct hash_state *s, const struct balloon_options *opts, const uint8_t salt[SALT_LEN]) {
++  s->counter = 0;
++  s->n_blocks = options_n_blocks (opts);
++  if (s->n_blocks % 2 != 0) s->n_blocks++;
++  s->has_mixed = false;
++  s->opts = opts;
++  s->buffer = malloc (s->n_blocks * BLOCK_SIZE);
++  int a = salt[0];
++  a++;
++  bitstream_init (&s->bstream);
++  bitstream_seed_add (&s->bstream, salt, SALT_LEN);
++  bitstream_seed_add (&s->bstream, &opts->s_cost, 8);
++  bitstream_seed_add (&s->bstream, &opts->t_cost, 4);
++  bitstream_seed_finalize (&s->bstream);
++}
++
++int hash_state_free (struct hash_state *s) {
++  bitstream_free (&s->bstream);
++  free (s->buffer);
++}
++
++int hash_state_fill (struct hash_state *s, const uint8_t salt[SALT_LEN], const uint8_t *in, size_t inlen) {
++  SHA256_CTX c;
++  SHA256_Init (&c);
++  SHA256_Update (&c, &s->counter, 8);
++  SHA256_Update (&c, salt, SALT_LEN);
++  SHA256_Update (&c, in, inlen);
++  SHA256_Update (&c, &s->opts->s_cost, 8);
++  SHA256_Update (&c, &s->opts->t_cost, 4);
++  SHA256_Final (s->buffer, &c);
++  s->counter++;
++  expand (&s->counter, s->buffer, s->n_blocks);
++}
++
++int hash_state_mix (struct hash_state *s, int32_t mixrounds) {
++  size_t i, n;
++  int32_t rounds;
++  uint8_t buf[8];
++  uint64_t neighbor;
++  for (rounds=0; rounds < mixrounds; rounds++) {
++   for (i = 0; i < s->n_blocks; i++) {
++    uint8_t *cur_block = block_index (s, i);
++    const size_t n_blocks_to_hash = 3;
++    const uint8_t *blocks[2+n_blocks_to_hash];
++    const uint8_t *prev_block = i ? cur_block - BLOCK_SIZE : block_last (s);
++    blocks[0] = prev_block;
++    blocks[1] = cur_block;
++    for (n = 2; n < 2+n_blocks_to_hash; n++) {
++      bitstream_fill_buffer (&s->bstream, buf, 8);
++      neighbor = bytes_to_littleend_uint64 (buf, 8);
++      blocks[n] = block_index (s, neighbor % s->n_blocks);
++    }
++    compressb (&s->counter, cur_block, blocks, 2+n_blocks_to_hash);
++   }
++   s->has_mixed = true;
++  }
++}
++
++int hash_state_extract (const struct hash_state *s, uint8_t out[BLOCK_SIZE]) {
++  uint8_t *b = block_last (s);
++  memcpy ((char *)out, (const char *)b, BLOCK_SIZE);
++}
++
++#ifdef __cplusplus
++}
++#endif
+\ No newline at end of file
+diff --git a/src/Native/libmultihash/balloon.h b/src/Native/libmultihash/balloon.h
+new file mode 100644
+index 0000000..dfff2f1
+--- /dev/null
++++ b/src/Native/libmultihash/balloon.h
+@@ -0,0 +1,72 @@
++#include <stdbool.h>
++#include <stdint.h>
++#include <openssl/aes.h>
++#include <openssl/evp.h>
++#include "sha256.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#define BITSTREAM_BUF_SIZE ((32) * (AES_BLOCK_SIZE))
++#define N_NEIGHBORS (3)
++#define SALT_LEN (32)
++#define INLEN_MAX (1ull<<20)
++#define TCOST_MIN 1ull
++#define SCOST_MIN (1)
++#define SCOST_MAX (UINT32_MAX)
++#define BLOCKS_MIN (1ull)
++#define THREADS_MAX 4096
++#define BLOCK_SIZE (32)
++#define UNUSED __attribute__ ((unused))
++
++struct bitstream {
++  bool initialized;
++  uint8_t *zeros;
++  SHA256_CTX c;
++#if   OPENSSL_VERSION_NUMBER >= 0x10100000L
++  EVP_CIPHER_CTX* ctx;
++#else
++  EVP_CIPHER_CTX ctx;
++#endif
++};
++
++struct hash_state;
++
++struct hash_state {
++  uint64_t counter;
++  uint64_t n_blocks;
++  bool has_mixed;
++  uint8_t *buffer;
++  struct bitstream bstream;
++  const struct balloon_options *opts;
++};
++
++struct balloon_options {
++  int64_t s_cost;
++  int32_t t_cost;
++};
++
++void balloon_hash (const char* input, char* output, uint32_t len);
++void balloon (unsigned char *input, unsigned char *output, int32_t len, int64_t s_cost, int32_t t_cost);
++
++int bitstream_init (struct bitstream *b);
++int bitstream_free (struct bitstream *b);
++int bitstream_seed_add (struct bitstream *b, const void *seed, size_t seedlen);
++int bitstream_seed_finalize (struct bitstream *b);
++int bitstream_fill_buffer (struct bitstream *b, void *out, size_t outlen);
++int bitstream_rand_byte (struct bitstream *b, uint8_t *out);
++int compressb (uint64_t *counter, uint8_t *out, const uint8_t *blocks[], size_t blocks_to_comp);
++int expand (uint64_t *counter, uint8_t *buf, size_t blocks_in_buf);
++uint64_t bytes_to_littleend_uint64 (const uint8_t *bytes, size_t n_bytes);
++int hash_state_init (struct hash_state *s, const struct balloon_options *opts, const uint8_t salt[SALT_LEN]);
++int hash_state_free (struct hash_state *s);
++int hash_state_fill (struct hash_state *s, const uint8_t salt[SALT_LEN], const uint8_t *in, size_t inlen);
++int hash_state_mix (struct hash_state *s, int32_t mixrounds);
++int hash_state_extract (const struct hash_state *s, uint8_t out[BLOCK_SIZE]);
++void * block_index (const struct hash_state *s, size_t i);
++void * block_last (const struct hash_state *s);
++
++#ifdef __cplusplus
++}
++#endif
+diff --git a/src/Native/libmultihash/exports.cpp b/src/Native/libmultihash/exports.cpp
+index e5da33a..f0d3284 100644
+--- a/src/Native/libmultihash/exports.cpp
++++ b/src/Native/libmultihash/exports.cpp
+@@ -26,6 +26,8 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ #include "skein.h"
+ #include "skein2.h"
+ #include "x11.h"
++#include "balloon.h"
++#include "whirlpool.h"
+ #include "groestl.h"
+ #include "blake.h"
+ #include "fugue.h"
+@@ -149,6 +151,16 @@ extern "C" MODULE_API void x11_export(const char* input, char* output, uint32_t
+ 	x11_hash(input, output, input_len);
+ }
+ 
++extern "C" MODULE_API void balloon_export(const char* input, char* output, uint32_t input_len)
++{
++	balloon_hash(input, output, input_len);
++}
++
++extern "C" MODULE_API void whirlpool_export(const char* input, char* output, uint32_t input_len)
++{
++	whirlpool_hash(input, output, input_len);
++}
++
+ extern "C" MODULE_API void x13_export(const char* input, char* output, uint32_t input_len)
+ {
+     x13_hash(input, output, input_len);
+diff --git a/src/Native/libmultihash/whirlpool.c b/src/Native/libmultihash/whirlpool.c
+new file mode 100644
+index 0000000..4f28bad
+--- /dev/null
++++ b/src/Native/libmultihash/whirlpool.c
+@@ -0,0 +1,37 @@
++#include <string.h>
++#include "sha3/sph_whirlpool.h"
++#include "whirlpool.h"
++
++/*
++ * Mirrors MateableCoin's own crypto/whirlpool/whirlpool.c byte-for-byte:
++ * four chained passes of sph_whirlpool1 (the corrected/final NESSIE
++ * whirlpool variant, not the older sph_whirlpool/whirlpool0 revisions).
++ * sph_whirlpool.c itself (src/Native/libmultihash/sha3/sph_whirlpool.c in
++ * this repo) was confirmed byte-identical to MateableCoin's own copy before
++ * this wrapper was written -- only this chaining wrapper is new.
++ */
++void whirlpool_hash(const char* input, char* output, uint32_t len)
++{
++    unsigned char hash[64];
++    memset(hash, 0, sizeof(hash));
++
++    sph_whirlpool1_context ctx_whirlpool;
++
++    sph_whirlpool1_init(&ctx_whirlpool);
++    sph_whirlpool1(&ctx_whirlpool, input, len);
++    sph_whirlpool1_close(&ctx_whirlpool, (void*)hash);
++
++    sph_whirlpool1_init(&ctx_whirlpool);
++    sph_whirlpool1(&ctx_whirlpool, (const void*)hash, 64);
++    sph_whirlpool1_close(&ctx_whirlpool, (void*)hash);
++
++    sph_whirlpool1_init(&ctx_whirlpool);
++    sph_whirlpool1(&ctx_whirlpool, (const void*)hash, 64);
++    sph_whirlpool1_close(&ctx_whirlpool, (void*)hash);
++
++    sph_whirlpool1_init(&ctx_whirlpool);
++    sph_whirlpool1(&ctx_whirlpool, (const void*)hash, 64);
++    sph_whirlpool1_close(&ctx_whirlpool, (void*)hash);
++
++    memcpy(output, hash, 32);
++}
+diff --git a/src/Native/libmultihash/whirlpool.h b/src/Native/libmultihash/whirlpool.h
+new file mode 100644
+index 0000000..9291d4b
+--- /dev/null
++++ b/src/Native/libmultihash/whirlpool.h
+@@ -0,0 +1,16 @@
++#ifndef MTBC_WHIRLPOOL_H
++#define MTBC_WHIRLPOOL_H
++
++#include <stdint.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++void whirlpool_hash(const char* input, char* output, uint32_t len);
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif

@@ -43,6 +43,12 @@ public static unsafe class Multihash
     [DllImport("libmultihash", EntryPoint = "x11_export", CallingConvention = CallingConvention.Cdecl)]
     public static extern void x11(byte* input, void* output, uint inputLength);
 
+    [DllImport("libmultihash", EntryPoint = "balloon_export", CallingConvention = CallingConvention.Cdecl)]
+    public static extern void balloon(byte* input, void* output, uint inputLength);
+
+    [DllImport("libmultihash", EntryPoint = "whirlpool_export", CallingConvention = CallingConvention.Cdecl)]
+    public static extern void whirlpool(byte* input, void* output, uint inputLength);
+
     [DllImport("libmultihash", EntryPoint = "x13_export", CallingConvention = CallingConvention.Cdecl)]
     public static extern void x13(byte* input, void* output, uint inputLength);
 

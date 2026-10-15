@@ -8531,5 +8531,61 @@
     "explorerBlockLink": "",
     "explorerTxLink": "",
     "explorerAccountLink": ""
+  },
+  "mateablecoin-balloon": {
+    "name": "MateableCoin",
+    "canonicalName": "MateableCoin (Balloon)",
+    "symbol": "MTBC",
+    "family": "bitcoin",
+    "website": "https://mateable.com/",
+    "market": "",
+    "twitter": "",
+    "telegram": "",
+    "discord": "",
+    "coinbaseHasher": {
+      "hash": "sha256d"
+    },
+    "headerHasher": {
+      "hash": "balloon"
+    },
+    "blockHasher": {
+      "hash": "reverse",
+      "args": [
+        {
+          "hash": "sha256d"
+        }
+      ]
+    },
+    "explorerBlockLink": "",
+    "explorerTxLink": "",
+    "explorerAccountLink": ""
+  },
+  "mateablecoin-whirlpool": {
+    "name": "MateableCoin",
+    "canonicalName": "MateableCoin (Whirlpool)",
+    "symbol": "MTBC",
+    "family": "bitcoin",
+    "website": "https://mateable.com/",
+    "market": "",
+    "twitter": "",
+    "telegram": "",
+    "discord": "",
+    "coinbaseHasher": {
+      "hash": "sha256d"
+    },
+    "headerHasher": {
+      "hash": "whirlpool"
+    },
+    "blockHasher": {
+      "hash": "reverse",
+      "args": [
+        {
+          "hash": "sha256d"
+        }
+      ]
+    },
+    "explorerBlockLink": "",
+    "explorerTxLink": "",
+    "explorerAccountLink": ""
   }
 }

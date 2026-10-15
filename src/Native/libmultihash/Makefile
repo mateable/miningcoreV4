@@ -1,10 +1,10 @@
 CFLAGS = -g -Wall -c -fPIC -O2 -Wno-pointer-sign -Wno-char-subscripts -Wno-unused-variable -Wno-unused-function -Wno-strict-aliasing -Wno-discarded-qualifiers -Wno-unused-const-variable $(CPU_FLAGS) $(HAVE_FEATURE)
 CXXFLAGS = -g -Wall -fPIC -fpermissive -O2 -Wno-char-subscripts -Wno-unused-variable -Wno-unused-function -Wno-strict-aliasing -Wno-sign-compare -std=c++11 $(CPU_FLAGS) $(HAVE_FEATURE)
 LDFLAGS = -shared
-LDLIBS = -lsodium
+LDLIBS = -lsodium -lssl -lcrypto
 TARGET  = libmultihash.so
 
-OBJECTS = bcrypt.o blake.o c11.o dcrypt.o fresh.o lane.o \
+OBJECTS = bcrypt.o blake.o balloon.o whirlpool.o c11.o dcrypt.o fresh.o lane.o \
 	fugue.o groestl.o hefty1.o jh.o keccak.o keccak512.o neoscrypt.o exports.o nist5.o quark.o qubit.o s3.o scryptn.o \
 	sha256csm.o hmq17.o phi.o phi2.o \
 	sha3/aes_helper.o sha3/hamsi.o sha3/hamsi_helper.o sha3/sph_blake.o sha3/sph_bmw.o sha3/sph_cubehash.o \
