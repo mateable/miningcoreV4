@@ -1,0 +1,192 @@
+{
+  "_comment": "Merged Mining Litecoin + Dogecoin (AuxPoW) example config",
+  "_info": "This feature is private. See docs/features/merged-mining.md | https://github.com/soosho/miningcore-merged",
+  "_pricing": "Contact soosho for licensing",
+  "logging": {
+    "level": "info",
+    "enableConsoleLog": true,
+    "enableConsoleColors": true,
+    "logFile": "miningcore.log",
+    "apiLogFile": "miningcore-api.log",
+    "logBaseDirectory": "/tmp/miningcore-logs",
+    "perPoolLogFile": true
+  },
+  "banning": {
+    "manager": "Integrated",
+    "banOnJunkReceive": true,
+    "banOnInvalidShares": false
+  },
+  "notifications": {
+    "enabled": false,
+    "email": {
+      "host": "smtp.example.com",
+      "port": 587,
+      "user": "user",
+      "password": "password",
+      "fromAddress": "info@yourpool.org",
+      "fromName": "support"
+    },
+    "admin": {
+      "enabled": false,
+      "emailAddress": "user@example.com",
+      "notifyBlockFound": true
+    }
+  },
+  "persistence": {
+    "postgres": {
+      "host": "127.0.0.1",
+      "port": 5432,
+      "user": "miningcore",
+      "password": "miningcore",
+      "database": "miningcore"
+    }
+  },
+  "paymentProcessing": {
+    "enabled": true,
+    "interval": 600,
+    "shareRecoveryFile": "recovered-shares.txt"
+  },
+  "api": {
+    "enabled": true,
+    "listenAddress": "*",
+    "port": 4000,
+    "metricsIpWhitelist": [],
+    "rateLimiting": {
+      "disabled": true,
+      "rules": [
+        {
+          "Endpoint": "*",
+          "Period": "1s",
+          "Limit": 5
+        }
+      ],
+      "ipWhitelist": [""]
+    }
+  },
+  "pools": [
+    {
+      "_comment": "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      "_comment2": "  LITECOIN — Parent chain with merged mining enabled",
+      "_comment3": "  Miners connect here. DOGE blocks are mined automatically.",
+      "_comment4": "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      "id": "litecoin",
+      "enabled": true,
+      "coin": "litecoin",
+      "addressType": "Legacy",
+      "address": "YOUR_LTC_ADDRESS_HERE",
+      "rewardRecipients": [
+        {
+          "address": "YOUR_LTC_ADDRESS_HERE",
+          "percentage": 1.0
+        }
+      ],
+      "blockRefreshInterval": 500,
+      "jobRebroadcastTimeout": 10,
+      "clientConnectionTimeout": 600,
+      "banning": {
+        "enabled": true,
+        "time": 600,
+        "invalidPercent": 50,
+        "checkThreshold": 50
+      },
+      "ports": {
+        "3042": {
+          "listenAddress": "0.0.0.0",
+          "difficulty": 1024,
+          "name": "Scrypt ASIC Mining (LTC + DOGE merged)",
+          "varDiff": {
+            "minDiff": 512,
+            "targetTime": 15,
+            "retargetTime": 90,
+            "variancePercent": 30
+          }
+        }
+      },
+      "daemons": [
+        {
+          "host": "127.0.0.1",
+          "port": 9332,
+          "user": "pool",
+          "password": "YOUR_LTC_RPC_PASSWORD"
+        }
+      ],
+      "extra": {
+        "_comment": "Merged mining configuration — embeds DOGE hash into LTC coinbase",
+        "_info": "🔒 Private feature — https://github.com/soosho/miningcore-merged",
+        "_pricing": "Contact soosho for licensing",
+        "enabled": true,
+        "auxDaemons": [
+          {
+            "host": "127.0.0.1",
+            "port": 22555,
+            "user": "pool",
+            "password": "YOUR_DOGE_RPC_PASSWORD",
+            "chainId": 98
+          }
+        ]
+      },
+      "paymentProcessing": {
+        "enabled": true,
+        "minimumPayment": 0.5,
+        "payoutScheme": "PPLNS",
+        "payoutSchemeConfig": {
+          "factor": 2.0
+        }
+      }
+    },
+    {
+      "_comment": "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      "_comment2": "  DOGECOIN — Standalone pool for direct DOGE miners",
+      "_comment3": "  Also receives merged mining blocks from the LTC pool above.",
+      "_comment4": "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      "id": "dogecoin",
+      "enabled": true,
+      "coin": "dogecoin",
+      "address": "YOUR_DOGE_ADDRESS_HERE",
+      "rewardRecipients": [
+        {
+          "address": "YOUR_DOGE_ADDRESS_HERE",
+          "percentage": 1.0
+        }
+      ],
+      "blockRefreshInterval": 500,
+      "jobRebroadcastTimeout": 10,
+      "clientConnectionTimeout": 600,
+      "banning": {
+        "enabled": true,
+        "time": 600,
+        "invalidPercent": 50,
+        "checkThreshold": 50
+      },
+      "ports": {
+        "3043": {
+          "listenAddress": "0.0.0.0",
+          "difficulty": 1024,
+          "name": "Scrypt ASIC Mining (DOGE direct)",
+          "varDiff": {
+            "minDiff": 512,
+            "targetTime": 15,
+            "retargetTime": 90,
+            "variancePercent": 30
+          }
+        }
+      },
+      "daemons": [
+        {
+          "host": "127.0.0.1",
+          "port": 22555,
+          "user": "pool",
+          "password": "YOUR_DOGE_RPC_PASSWORD"
+        }
+      ],
+      "paymentProcessing": {
+        "enabled": true,
+        "minimumPayment": 100,
+        "payoutScheme": "PPLNS",
+        "payoutSchemeConfig": {
+          "factor": 2.0
+        }
+      }
+    }
+  ]
+}

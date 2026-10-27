@@ -1,0 +1,158 @@
+{
+    "//": "===============================================================",
+    "//2": "Pearl (PRL) mining pool configuration for MiningcoreV4",
+    "//3": "===============================================================",
+    "//4": "Pearl is a btcd-based L1 using Proof-of-Useful-Work (PoUW):",
+    "//5": "miners solve matrix PoUW puzzles and the pool converts their",
+    "//6": "PlainProof solutions into ZK proofs via a Python sidecar",
+    "//7": "(pearl_mining + pearl_gateway) before submitting blocks.",
+    "//8": "",
+    "//9": "REQUIREMENTS",
+    "//10": " 1. pearld v1.4.1 or newer, synced, with TLS RPC enabled.",
+    "//11": "    The network uses ZK certificate v3 - older nodes cannot sync!",
+    "//12": "    pearld.conf needs: rpcuser, rpcpass, rpclisten and",
+    "//13": "    miningaddr=<your prl1... taproot address>. Example:",
+    "//14": "      rpcuser=pearlrpc",
+    "//15": "      rpcpass=your-password",
+    "//16": "      rpclisten=127.0.0.1:44107",
+    "//17": "      miningaddr=prl1ppcv0tukfpnwjfgemhg2vs4m5rmqz4zl56matzjwhmk7rstnjy8ds4fw8px",
+    "//18": "    (pearld serves TLS by default; Miningcore accepts its self-signed",
+    "//19": "     cert automatically. If you start pearld with --notls set ssl:false.)",
+    "//20": "",
+    "//21": " 2. Python sidecar environment with BOTH packages installed",
+    "//22": "    (see pearl-research-labs/pearl repo, py-pearl-mining + miner/pearl-gateway).",
+    "//23": "    Create the venv INSIDE the miningcore directory so the paths",
+    "//24": "    below stay relative:",
+    "//25": "      python3 -m venv pearl-venv",
+    "//26": "      pearl-venv/bin/pip install maturin",
+    "//27": "      cd pearl-src/py-pearl-mining && maturin build --release &&",
+    "//28": "        ../../pearl-venv/bin/pip install target/wheels/*.whl",
+    "//29": "      pearl-venv/bin/pip install -e pearl-src/miner/pearl-gateway",
+    "//30": "    The bridge script itself ships with Miningcore:",
+    "//31": "      src/Miningcore/Blockchain/Pearl/pearl_mining_bridge.py",
+    "//32": "    Copy it next to Miningcore.dll (the pool's working directory) and",
+    "//33": "    keep pythonBridgeScript relative (default: pearl_mining_bridge.py).",
+    "//34": "    All paths are resolved relative to the miningcore base directory;",
+    "//35": "    use absolute paths only if the venv or bridge live elsewhere.",
+    "//36": "",
+    "//37": " 3. PostgreSQL permission for new pool partitions:",
+    "//38": "      sudo -u postgres psql -d miningcore \\",
+    "//39": "        -c \"GRANT CREATE ON SCHEMA public TO miningcore;\"",
+    "//40": "    Every new pool creates a shares_<poolid> partition on startup.",
+    "//41": "",
+    "//42": "HOW MINING WORKS HERE",
+    "//43": " - Pool polls pearld getblocktemplate (segwit rules) once per second.",
+    "//44": " - Bridge builds the incomplete 80-byte header for the pool's",
+    "//45": "   mining address and hands it to miners over Bitcoin-style stratum",
+    "//46": "   (mining.notify with job_id/header/target/difficulty).",
+    "//47": " - Miner submits mining.submit [jobId, plainProofBase64].",
+    "//48": " - Bridge verifies the proof (verify_plain_proof_for_cert_version with",
+    "//49": "   the cert version dictated by the block height), and if the proof",
+    "//50": "   meets the network target it generates the ZK proof and assembles",
+    "//51": "   the block, which is sent to pearld via submitblock.",
+    "//52": " - Stratum proof payloads are large; maxStratumRequestSize raises the",
+    "//53": "   32KB default request limit to 1MiB for this pool.",
+    "//54": "",
+    "//55": "NOTE: 'maxActiveJobs', 'extraNonce1Size', 'pythonExecutable',",
+    "//56": "      'pythonBridgeScript' and 'maxStratumRequestSize' are FLAT keys",
+    "//57": "      on the pool object (not nested under 'extra'). They land in the",
+    "//58": "      pool's JsonExtensionData and are read by PearlPool/PearlJobManager.",
+    "//59": "===============================================================",
+    "logging": {
+        "level": "info",
+        "enableConsoleLog": true,
+        "enableConsoleColors": true,
+        "logFile": "",
+        "apiLogFile": "",
+        "logBaseDirectory": "",
+        "perPoolLogFile": false
+    },
+    "banning": {
+        "manager": "Integrated",
+        "banOnJunkReceive": true,
+        "banOnInvalidShares": false
+    },
+    "notifications": {
+        "enabled": false
+    },
+    "persistence": {
+        "postgres": {
+            "host": "127.0.0.1",
+            "port": 5432,
+            "user": "miningcore",
+            "password": "password",
+            "database": "miningcore"
+        }
+    },
+    "paymentProcessing": {
+        "enabled": false,
+        "interval": 600,
+        "shareRecoveryFile": "recovered-shares.txt"
+    },
+    "api": {
+        "enabled": true,
+        "listenAddress": "*",
+        "port": 4000,
+        "metricsIpWhitelist": [],
+        "rateLimiting": {
+            "disabled": true,
+            "rules": []
+        }
+    },
+    "pools": [
+        {
+            "id": "pearl",
+            "enabled": true,
+            "coin": "pearl",
+            "address": "prl1ppcv0tukfpnwjfgemhg2vs4m5rmqz4zl56matzjwhmk7rstnjy8ds4fw8px",
+            "rewardRecipients": [
+                {
+                    "type": "op",
+                    "address": "prl1ppcv0tukfpnwjfgemhg2vs4m5rmqz4zl56matzjwhmk7rstnjy8ds4fw8px",
+                    "percentage": 1
+                }
+            ],
+            "blockRefreshInterval": 1000,
+            "jobRebroadcastTimeout": 60,
+            "clientConnectionTimeout": 600,
+            "banning": {
+                "enabled": false
+            },
+            "ports": {
+                "7777": {
+                    "listenAddress": "0.0.0.0",
+                    "name": "Pearl PoUW Mining",
+                    "difficulty": 1,
+                    "tls": false,
+                    "varDiff": {
+                        "minDiff": 1,
+                        "maxDiff": null,
+                        "targetTime": 15,
+                        "retargetTime": 90,
+                        "variancePercent": 30,
+                        "maxDelta": 500
+                    }
+                }
+            },
+            "daemons": [
+                {
+                    "//": "pearld node RPC. Mainnet default port is 44107.",
+                    "host": "127.0.0.1",
+                    "port": 44107,
+                    "user": "pearlrpc",
+                    "password": "your-pearld-rpc-password",
+                    "ssl": true
+                }
+            ],
+            "paymentProcessing": {
+                "enabled": false
+            },
+            "//": "Paths below are relative to the miningcore base directory.",
+            "maxActiveJobs": 4,
+            "extraNonce1Size": 4,
+            "pythonExecutable": "pearl-venv/bin/python3",
+            "pythonBridgeScript": "pearl_mining_bridge.py",
+            "maxStratumRequestSize": 1048576
+        }
+    ]
+}

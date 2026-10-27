@@ -1,0 +1,16 @@
+{
+    "_comment": "Pool endpoint with hardened TCP settings — example only",
+    "ports": {
+        "3042": {
+            "listenAddress": "0.0.0.0",
+            "difficulty": 8,
+            "tcpBacklog": 16,
+            "varDiff": {
+                "minDiff": 2,
+                "targetTime": 15,
+                "retargetTime": 90,
+                "variancePercent": 30
+            }
+        }
+    }
+}

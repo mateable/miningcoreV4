@@ -1,0 +1,102 @@
+{
+    "$schema": "https://raw.githubusercontent.com/soosho/miningcore/master/src/Miningcore/config.schema.json",
+
+    "adminPanel": {
+        "enabled": false,
+        "port": 8080,
+        "password": "",
+        "sessionTimeout": 3600,
+        "maxLoginAttempts": 5,
+        "loginBanDuration": 300
+    },
+
+    "logging": {
+        "level": "info",
+        "enableConsoleLog": true,
+        "enableConsoleColors": true,
+        "logFile": "",
+        "apiLogFile": "",
+        "logBaseDirectory": "",
+        "perPoolLogFile": false,
+
+        "otlpEndpoint": ""
+    },
+    "banning": {
+        "manager": "Integrated",
+        "banOnJunkReceive": false,
+        "banOnInvalidShares": false
+    },
+    "notifications": {
+        "enabled": false,
+        "email": {
+            "host": "smtp.example.com",
+            "port": 587,
+            "user": "user",
+            "password": "password",
+            "fromAddress": "info@yourpool.org",
+            "fromName": "pool support"
+        },
+        "admin": {
+            "enabled": false,
+            "emailAddress": "user@example.com",
+            "notifyBlockFound": true
+        }
+    },
+    "persistence": {
+        "postgres": {
+            "host": "127.0.0.1",
+            "port": 5432,
+            "user": "miningcore",
+            "password": "password",
+            "database": "miningcore"
+        }
+    },
+    "paymentProcessing": {
+        "enabled": true,
+        "interval": 100,
+        "shareRecoveryFile": "recovered-shares.txt"
+    },
+    "api": {
+        "enabled": true,
+        "listenAddress": "*",
+        "port": 4000,
+        "rateLimiting": {
+            "disabled": false,
+            "whitelist": ["127.0.0.1", "::1", "::ffff:127.0.0.1"]
+        },
+        "adminIpWhitelist": ["127.0.0.1", "::1", "::ffff:127.0.0.1"],
+        "metricsIpWhitelist": ["127.0.0.1", "::1", "::ffff:127.0.0.1"]
+    },
+    "pools": [{
+        "id": "eth1",
+        "enabled": true,
+        "coin": "ethereum",
+        "address": "0xbd9bf193bf6ba5bf0dc25418e96082580fb9498f",
+        "rewardRecipients": [],
+        "blockRefreshInterval": 1000,
+        "jobRebroadcastTimeout": 10,
+        "clientConnectionTimeout": 600,
+        "banning": {
+            "enabled": true,
+            "time": 600,
+            "invalidPercent": 50,
+            "checkThreshold": 50
+        },
+        "ports": {
+            "3032": {
+                "listenAddress": "0.0.0.0",
+                "difficulty": 1,
+                "name": "Test Port"
+            }
+        },
+        "daemons": [{
+            "host": "127.0.0.1",
+            "port": 8545,
+            "user": "user",
+            "password": "password"
+        }],
+        "paymentProcessing": {
+            "enabled": false
+        }
+    }]
+}
