@@ -1,8 +1,6 @@
 [![.NET](https://github.com/Blockistry/miningcore/actions/workflows/dotnet.yml/badge.svg)](https://github.com/Blockistry/miningcore/actions/workflows/dotnet.yml)
 [![license](https://img.shields.io/github/license/mashape/apistatus.svg)](LICENSE)
 
-> 🚀 **[Miningcore Premium UI](https://github.com/soosho/miningcore.ui)** — A modern, feature-rich web dashboard for Miningcore. Track hashrates, manage miners, view blocks, payments, and pool performance in real-time. [Get it here →](https://github.com/soosho/miningcore.ui)
-
 <img src="https://github.com/lurchinms/miningcoreV4/blob/main/logo.png" width="150">
 
 # Miningcore Community Edition (MCCE)
