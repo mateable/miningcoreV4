@@ -128,7 +128,7 @@ public abstract class StratumServer
                 var socket = await server.AcceptAsync(ct);
 
                 var remoteEndpoint = socket.RemoteEndPoint as IPEndPoint;
-                if(remoteEndpoint != null && !banManager.ThrottleConnect(remoteEndpoint.Address))
+                if(remoteEndpoint != null && banManager?.ThrottleConnect(remoteEndpoint.Address) == false)
                 {
                     socket.Close();
                     continue;
