@@ -1473,36 +1473,6 @@
     "explorerTxLink": "https://explorer.cpuchain.org/#/tx/{0}",
     "explorerAccountLink": "https://explorer.cpuchain.org/#/address/{0}"
   },
-  "dadarpay": {
-    "name": "Dadar Pay",
-    "symbol": "DDR",
-    "family": "bitcoin",
-    "website": "https://dadar.xyz/",
-    "github": "https://github.com/dadarpay/DDR",
-    "market": "https://exchange.spectra.cash/#/market/DEX.DDR_DEX.USDT",
-    "twitter": "https://x.com/CoinDadar",
-    "telegram": "",
-    "discord": "https://discord.gg/R32FTyKdXC",
-    "coinbaseHasher": {
-      "hash": "sha256d"
-    },
-    "headerHasher": {
-      "hash": "x11kvs"
-    },
-    "blockHasher": {
-      "hash": "reverse",
-      "args": [
-        {
-          "hash": "x11kvs"
-        }
-      ]
-    },
-    "hasMasterNodes": true,
-    "hasPayee": true,
-    "explorerBlockLink": "https://blocks.dadar.xyz/block/$hash$",
-    "explorerTxLink": "https://blocks.dadar.xyz/tx/{0}",
-    "explorerAccountLink": "https://blocks.dadar.xyz/address/{0}"
-  },
   "dash": {
     "name": "Dash",
     "canonicalName": "Dash",
@@ -2746,34 +2716,6 @@
     "explorerBlockLink": "https://e.hnsfans.com/block/$height$",
     "explorerTxLink": "https://e.hnsfans.com/tx/{0}",
     "explorerAccountLink": "https://e.hnsfans.com/address/{0}"
-  },
-  "hellar": {
-    "name": "Hellar",
-    "symbol": "HEL",
-    "family": "bitcoin",
-    "website": "https://hellar.io/",
-    "market": "",
-    "twitter": "https://twitter.com/HellarCore",
-    "telegram": "",
-    "discord": "https://discord.gg/U7W5WXxzfT",
-    "coinbaseHasher": {
-      "hash": "sha256d"
-    },
-    "headerHasher": {
-      "hash": "x11gost"
-    },
-    "blockHasher": {
-      "hash": "reverse",
-      "args": [
-        {
-          "hash": "x11gost"
-        }
-      ]
-    },
-    "hasMasterNodes": true,
-    "explorerBlockLink": "http://chain.hellar.io/block/$hash$",
-    "explorerTxLink": "http://chain.hellar.io/tx/{0}",
-    "explorerAccountLink": "http://chain.hellar.io/address/{0}"
   },
   "help-the-homeless": {
     "name": "Help The Homeless",
@@ -4248,36 +4190,6 @@
     "explorerBlockLink": "https://pepeblocks.com/block/$hash$",
     "explorerTxLink": "https://pepeblocks.com/tx/{0}",
     "explorerAccountLink": "https://pepeblocks.com/address/{0}"
-  },
-  "pepepow": {
-    "name": "PepePow",
-    "canonicalName": "PepePow",
-    "symbol": "PEPEW",
-    "family": "bitcoin",
-    "website": "https://pepecore.com/",
-    "market": "",
-    "twitter": "https://twitter.com/pepepow_coin",
-    "telegram": "",
-    "discord": "https://discord.com/invite/jJgV73w8Zs",
-    "coinbaseHasher": {
-      "hash": "sha256d"
-    },
-    "headerHasher": {
-      "hash": "memehash"
-    },
-    "blockHasher": {
-      "hash": "reverse",
-      "args": [
-        {
-          "hash": "memehash"
-        }
-      ]
-    },
-    "hasMasterNodes": true,
-    "hasFoundation": true,
-    "explorerBlockLink": "https://explorer.pepecore.com/block/$hash$",
-    "explorerTxLink": "https://explorer.pepecore.com/tx/{0}",
-    "explorerAccountLink": "https://explorer.pepecore.com/address/{0}"
   },
   "palladium": {
     "name": "Palladium",
@@ -5880,36 +5792,6 @@
     "explorerBlockLink": "https://www.coinexplorer.net/SHND/block/$height$",
     "explorerTxLink": "https://www.coinexplorer.net/SHND/tx/{0}",
     "explorerAccountLink": "https://www.coinexplorer.net/SHND/address/{0}"
-  },
-  "sugarchain": {
-    "name": "Sugarchain",
-    "canonicalName": "SugarChain",
-    "symbol": "SUGAR",
-    "family": "bitcoin",
-    "website": "https://sugarchain.org/",
-    "twitter": "https://twitter.com/sugarchain_dev",
-    "market": "https://coinpaprika.com/coin/sugar-sugarchain",
-    "telegram": "https://t.me/sugarchain",
-    "discord": "",
-    "github": "https://github.com/sugarchain-project/sugarchain",
-    "coinbaseHasher": {
-      "hash": "sha256d"
-    },
-    "headerHasher": {
-      "hash": "yespowersugar"
-    },
-    "blockHasher": {
-      "hash": "reverse",
-      "args": [
-        {
-          "hash": "sha256d"
-        }
-      ]
-    },
-    "shareMultiplier": 65536,
-    "explorerBlockLink": "https://sugarchain.org/explorer/#/block/$hash$",
-    "explorerTxLink": "https://sugarchain.org/explorer/#/transaction/{0}",
-    "explorerAccountLink": "https://sugarchain.org/explorer/#/address/{0}"
   },
   "susucoin": {
     "name": "Susucoin",
