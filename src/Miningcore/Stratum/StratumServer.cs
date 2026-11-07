@@ -77,6 +77,34 @@ public abstract class StratumServer
     }
 
     protected readonly ConcurrentDictionary<string, StratumConnection> connections = new();
+
+    /// <summary>
+    /// Snapshot, not a live view - callers get the connection state as of
+    /// this exact call, same as every other stats endpoint in this app.
+    /// context can be null for a connection that hasn't authorized yet
+    /// (mining.subscribe happened, mining.authorize hasn't), so those are
+    /// skipped rather than returned with placeholder/default miner info.
+    /// </summary>
+    public IEnumerable<Api.Responses.LiveMinerConnection> GetLiveConnections()
+    {
+        return connections.Values
+            .Select(c => (c, context: c.ContextAs<Mining.WorkerContextBase>()))
+            .Where(x => x.context != null)
+            .Select(x => new Api.Responses.LiveMinerConnection
+            {
+                ConnectionId = x.c.ConnectionId,
+                RemoteIp = x.c.RemoteEndpoint?.Address?.ToString(),
+                Miner = x.context.Miner,
+                Worker = x.context.Worker,
+                Difficulty = x.context.Difficulty,
+                ValidShares = x.context.Stats?.ValidShares ?? 0,
+                InvalidShares = x.context.Stats?.InvalidShares ?? 0,
+                IsAuthorized = x.context.IsAuthorized,
+                Created = x.context.Created,
+                LastActivity = x.context.LastActivity,
+            })
+            .ToArray();
+    }
     protected static readonly ConcurrentDictionary<string, X509Certificate2> certs = new();
     protected static readonly FrozenSet<int> ignoredSocketErrors;
 
@@ -121,38 +149,51 @@ public abstract class StratumServer
     {
         var cert = GetTlsCert(port);
 
-        while(!ct.IsCancellationRequested)
+        try
         {
-            try
+            while(!ct.IsCancellationRequested)
             {
-                var socket = await server.AcceptAsync(ct);
-
-                var remoteEndpoint = socket.RemoteEndPoint as IPEndPoint;
-                if(remoteEndpoint != null && banManager?.ThrottleConnect(remoteEndpoint.Address) == false)
+                try
                 {
-                    socket.Close();
-                    continue;
+                    var socket = await server.AcceptAsync(ct);
+
+                    var remoteEndpoint = socket.RemoteEndPoint as IPEndPoint;
+                    if(remoteEndpoint != null && banManager?.ThrottleConnect(remoteEndpoint.Address) == false)
+                    {
+                        socket.Close();
+                        continue;
+                    }
+
+                    AcceptConnection(socket, port, cert, ct);
                 }
 
-                AcceptConnection(socket, port, cert, ct);
-            }
+                catch(OperationCanceledException)
+                {
+                    // ignored
+                    break;
+                }
 
-            catch(OperationCanceledException)
-            {
-                // ignored
-                break;
-            }
+                catch(ObjectDisposedException)
+                {
+                    // ignored
+                    break;
+                }
 
-            catch(ObjectDisposedException)
-            {
-                // ignored
-                break;
+                catch(Exception ex)
+                {
+                    logger.Error(ex);
+                }
             }
-
-            catch(Exception ex)
-            {
-                logger.Error(ex);
-            }
+        }
+        finally
+        {
+            // Without this, the listening socket itself was never released on
+            // cancellation - only the accept loop stopped. SO_REUSEADDR let a
+            // same-port restart silently bind a second listener alongside the
+            // still-open old one, masking the leak; removing a pool entirely
+            // (admin panel / hot-reload) leaves the port bound and reachable
+            // long after the pool was "stopped and removed" without this.
+            server.Close();
         }
     }
 

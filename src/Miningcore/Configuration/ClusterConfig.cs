@@ -968,6 +968,14 @@ public partial class AdminPanelConfig
     /// Default: 300 (5 minutes)
     /// </summary>
     public int LoginBanDuration { get; set; } = 300;
+
+    /// <summary>
+    /// If set, only these exact IPs may reach /admin at all (checked before
+    /// the password form, same matching behavior api.adminIpWhitelist uses
+    /// for /api/admin - exact address match, no CIDR ranges).
+    /// Leave empty/null to allow any IP (password auth only).
+    /// </summary>
+    public string[] IpWhitelist { get; set; }
 }
 
 public partial class NetworkEndpointConfig

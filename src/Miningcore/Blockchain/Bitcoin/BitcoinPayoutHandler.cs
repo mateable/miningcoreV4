@@ -153,8 +153,13 @@ public class BitcoinPayoutHandler : PayoutHandlerBase,
                     switch(transactionInfo.Details[0].Category)
                     {
                         case "immature":
-                            // update progress
-                            block.ConfirmationProgress = Math.Min(1.0d, (double) transactionInfo.Confirmations / minConfirmations);
+                            // update progress - MinConfirmationsOverride lets the admin
+                            // panel adjust the *displayed* progress denominator live;
+                            // real payout eligibility always comes from the daemon's
+                            // own "immature"/"generate" classification above, never
+                            // from this value (see MinConfirmationsOverride's own doc comment)
+                            block.ConfirmationProgress = Math.Min(1.0d, (double) transactionInfo.Confirmations /
+                                MinConfirmationsOverride.Resolve(poolConfig.Id, minConfirmations));
                             block.Reward = transactionInfo.Amount;  // update actual block-reward from coinbase-tx
                             result.Add(block);
 

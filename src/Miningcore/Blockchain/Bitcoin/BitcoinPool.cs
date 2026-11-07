@@ -143,7 +143,8 @@ public class BitcoinPool : PoolBase
         var workerName = split?.Skip(1).FirstOrDefault()?.Trim() ?? string.Empty;
 
         // assumes that minerName is an address
-        context.IsAuthorized = await manager.ValidateAddressAsync(minerName, ct);
+        context.IsAuthorized = await manager.ValidateAddressAsync(minerName, ct) &&
+            !Banning.MinerAddressBanManager.IsBanned(poolConfig.Id, minerName);
         context.Miner = minerName;
         context.Worker = workerName;
 
@@ -451,6 +452,11 @@ public class BitcoinPool : PoolBase
     }
 
     public override double ShareMultiplier => coin.ShareMultiplier;
+
+    public override Task<object> ExecuteDaemonRpcAsync(string method, object[] parameters, CancellationToken ct)
+    {
+        return manager.ExecuteDaemonRpcAsync(method, parameters, ct);
+    }
 
     #region Overrides
 

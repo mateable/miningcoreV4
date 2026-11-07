@@ -423,6 +423,23 @@ public abstract class BitcoinJobManagerBase<TJob> : JobManagerBase<TJob>
         rpc = new RpcClient(poolConfig.Daemons.First(), jsonSerializerSettings, messageBus, poolConfig.Id);
     }
 
+    /// <summary>
+    /// Backs the admin-panel's raw daemon RPC console. Returns the raw JToken result (or
+    /// throws with the daemon's own error message) - deliberately unrestricted on method
+    /// name since this is explicitly a "run any RPC command" tool, same as bitcoin-cli.
+    /// Access control is the caller's responsibility (gated by the same IP-allowlist/auth
+    /// as the rest of /api/admin).
+    /// </summary>
+    public async Task<object> ExecuteDaemonRpcAsync(string method, object[] parameters, CancellationToken ct)
+    {
+        var result = await rpc.ExecuteAsync<JToken>(logger, method, ct, parameters?.Length > 0 ? parameters : null);
+
+        if(result.Error != null)
+            throw new Exception($"Daemon RPC error {result.Error.Code}: {result.Error.Message}");
+
+        return result.Response;
+    }
+
     protected override async Task<bool> AreDaemonsHealthyAsync(CancellationToken ct)
     {
         if(hasLegacyDaemon)

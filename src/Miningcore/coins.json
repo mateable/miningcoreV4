@@ -8408,9 +8408,9 @@
         }
       ]
     },
-    "explorerBlockLink": "",
-    "explorerTxLink": "",
-    "explorerAccountLink": ""
+    "explorerBlockLink": "https://explorer.mateable.com/block/{0}",
+    "explorerTxLink": "https://explorer.mateable.com/tx/{0}",
+    "explorerAccountLink": "https://explorer.mateable.com/address/{0}"
   },
   "mateablecoin-whirlpool": {
     "name": "MateableCoin",
@@ -8436,8 +8436,8 @@
         }
       ]
     },
-    "explorerBlockLink": "",
-    "explorerTxLink": "",
-    "explorerAccountLink": ""
+    "explorerBlockLink": "https://explorer.mateable.com/block/{0}",
+    "explorerTxLink": "https://explorer.mateable.com/tx/{0}",
+    "explorerAccountLink": "https://explorer.mateable.com/address/{0}"
   }
 }

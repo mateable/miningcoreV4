@@ -8,6 +8,7 @@ using System.Reactive.Linq;
 using Autofac;
 using AutoMapper;
 using Microsoft.Extensions.Hosting;
+using Miningcore.Alerts;
 using Miningcore.Configuration;
 using Miningcore.Contracts;
 using Miningcore.Extensions;
@@ -150,6 +151,20 @@ public class StatsRecorder : BackgroundService
 
                 logger.Info(() => $"[{poolId}] Reset performance stats for pool");
             }
+
+            AlertRuleManager.ObserveBlockHeight(poolId, pool.NetworkStats?.BlockHeight ?? 0);
+
+            AlertRuleManager.Evaluate(
+                (pid, metric) => pid != poolId ? null : metric switch
+                {
+                    "poolHashrate" => pool.PoolStats.PoolHashrate,
+                    "connectedMiners" => pool.PoolStats.ConnectedMiners,
+                    "networkHashrate" => pool.NetworkStats?.NetworkHashrate,
+                    "networkDifficulty" => pool.NetworkStats?.NetworkDifficulty,
+                    _ => (double?) null,
+                },
+                onTriggered: (subject, message) => messageBus.SendMessage(new AdminNotification(subject, message)),
+                onCleared: (subject, message) => messageBus.SendMessage(new AdminNotification(subject, message)));
 
             // persist
             await cf.RunTx(async (con, tx) =>
