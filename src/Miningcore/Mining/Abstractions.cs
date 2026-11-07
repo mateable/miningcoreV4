@@ -1,3 +1,4 @@
+using Miningcore.Api.Responses;
 using Miningcore.Blockchain;
 using Miningcore.Configuration;
 
@@ -12,4 +13,13 @@ public interface IMiningPool
     void Configure(PoolConfig pc, ClusterConfig cc);
     double HashrateFromShares(double shares, double interval);
     Task RunAsync(CancellationToken ct);
+    IEnumerable<LiveMinerConnection> GetLiveConnections();
+
+    /// <summary>
+    /// Executes an arbitrary RPC call against this pool's configured daemon, for the
+    /// admin-panel RPC console. Default (PoolBase) throws NotSupportedException - only
+    /// pool types that override this (currently just Bitcoin-family) support it, since
+    /// the RPC client type/shape differs per blockchain family.
+    /// </summary>
+    Task<object> ExecuteDaemonRpcAsync(string method, object[] parameters, CancellationToken ct);
 }

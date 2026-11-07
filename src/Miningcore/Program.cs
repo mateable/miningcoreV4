@@ -39,6 +39,7 @@ using Miningcore.Crypto.Hashing.Progpow.Phihash;
 using Miningcore.Crypto.Hashing.Progpow.ProgpowZ;
 using Miningcore.Crypto.Hashing.Progpow.Sccpow;
 using Miningcore.Extensions;
+using Miningcore.Logging;
 using Miningcore.Messaging;
 using Miningcore.Mining;
 using Miningcore.Native;
@@ -381,6 +382,13 @@ public class Program : BackgroundService
     private static readonly AdminGcStats gcStats = new();
     private static string configFilePath; // stored for hot-reload
 
+    /// <summary>
+    /// Public accessor for the admin panel's coin/pool add/edit/remove
+    /// endpoints, which need to read-modify-write the actual config file
+    /// ConfigHotReloadService is watching.
+    /// </summary>
+    public static string ConfigFilePath => configFilePath;
+
     public Program(IComponentContext container, IHostApplicationLifetime hal)
     {
         this.container = container;
@@ -710,6 +718,16 @@ public class Program : BackgroundService
             loggingConfig.AddRule(level, NLog.LogLevel.Info, nullTarget, "Microsoft.AspNetCore.Mvc.Infrastructure.*", true);
             loggingConfig.AddRule(level, NLog.LogLevel.Warn, nullTarget, "System.Net.Http.HttpClient.*", true);
             loggingConfig.AddRule(level, NLog.LogLevel.Fatal, nullTarget, "Microsoft.Extensions.Hosting.Internal.*", true);
+
+            // In-memory ring buffer for the admin panel's log viewer - always
+            // active regardless of logFile/perPoolLogFile, so the dashboard
+            // works with no file-based logging configured at all.
+            if(!isShareRecoveryMode)
+            {
+                var memoryTarget = new MemoryLogTarget { Name = "memory", Layout = layout };
+                loggingConfig.AddTarget(memoryTarget);
+                loggingConfig.AddRule(level, NLog.LogLevel.Fatal, memoryTarget);
+            }
 
             // Api Log
             if(!string.IsNullOrEmpty(config.ApiLogFile) && !isShareRecoveryMode)

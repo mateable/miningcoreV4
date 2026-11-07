@@ -408,6 +408,11 @@ Pool Fee:               {(poolConfig.RewardRecipients?.Any() == true ? poolConfi
     public abstract double HashrateFromShares(double shares, double interval);
     public virtual double ShareMultiplier => 1;
 
+    public virtual Task<object> ExecuteDaemonRpcAsync(string method, object[] parameters, CancellationToken ct)
+    {
+        throw new NotSupportedException($"Raw daemon RPC console is not supported for pool type {GetType().Name}");
+    }
+
     public virtual async Task RunAsync(CancellationToken ct)
     {
         Contract.RequiresNonNull(poolConfig);

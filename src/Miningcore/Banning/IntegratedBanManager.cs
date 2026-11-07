@@ -1,16 +1,17 @@
 using System.Collections.Concurrent;
 using System.Net;
-using Microsoft.Extensions.Caching.Memory;
 using Contract = Miningcore.Contracts.Contract;
 
 namespace Miningcore.Banning;
 
 public class IntegratedBanManager : IBanManager
 {
-    private static readonly IMemoryCache cache = new MemoryCache(new MemoryCacheOptions
-    {
-        ExpirationScanFrequency = TimeSpan.FromSeconds(10)
-    });
+    // Replaces the previous IMemoryCache-backed ban store: IMemoryCache has
+    // no enumeration API, so the admin panel's ban-management view (list
+    // active bans, unban on demand) had no way to read what was actually
+    // banned. This dictionary is both the enforcement source (IsBanned)
+    // and the listing source - one place, no risk of the two disagreeing.
+    private static readonly ConcurrentDictionary<string, DateTime> bans = new();
 
     private static readonly ConcurrentDictionary<string, int> banCounts = new();
     private static readonly ConcurrentDictionary<string, ThrottleWindow> throttles = new();
@@ -34,7 +35,18 @@ public class IntegratedBanManager : IBanManager
 
     public bool IsBanned(IPAddress address)
     {
-        return cache.Get(address.ToString()) != null;
+        var key = address.ToString();
+
+        if(!bans.TryGetValue(key, out var until))
+            return false;
+
+        if(until <= DateTime.UtcNow)
+        {
+            bans.TryRemove(key, out _);
+            return false;
+        }
+
+        return true;
     }
 
     public void Ban(IPAddress address, TimeSpan duration)
@@ -46,7 +58,8 @@ public class IntegratedBanManager : IBanManager
             return;
 
         var key = address.ToString();
-        cache.Set(key, string.Empty, duration);
+        var until = duration == TimeSpan.MaxValue ? DateTime.MaxValue : DateTime.UtcNow.Add(duration);
+        bans[key] = until;
     }
 
     public void EscalateBan(IPAddress address)
@@ -59,7 +72,29 @@ public class IntegratedBanManager : IBanManager
         var idx = Math.Min(count - 1, Escalation.Length - 1);
         var duration = Escalation[idx];
 
-        cache.Set(key, string.Empty, duration);
+        var until = duration == TimeSpan.MaxValue ? DateTime.MaxValue : DateTime.UtcNow.Add(duration);
+        bans[key] = until;
+    }
+
+    public IEnumerable<BanEntry> ListBans()
+    {
+        var now = DateTime.UtcNow;
+
+        foreach(var kv in bans)
+        {
+            if(kv.Value <= now)
+            {
+                bans.TryRemove(kv.Key, out _);
+                continue;
+            }
+
+            yield return new BanEntry(kv.Key, kv.Value);
+        }
+    }
+
+    public bool Unban(IPAddress address)
+    {
+        return bans.TryRemove(address.ToString(), out _);
     }
 
     public bool ThrottleConnect(IPAddress address)

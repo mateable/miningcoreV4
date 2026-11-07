@@ -73,6 +73,32 @@ public class PayoutManager : BackgroundService
         pools.TryAdd(pool.Config.Id, pool);
     }
 
+    private readonly SemaphoreSlim manualRunLock = new(1, 1);
+
+    /// <summary>
+    /// Admin panel's "Run Payout Cycle Now" action. Resolved through DI as the
+    /// same singleton instance the BackgroundService loop runs on - not a
+    /// second instance ctx.Resolve'd fresh, which on the old hand-built admin
+    /// panel this is ported from caused a real bug (a second, never-started
+    /// PayoutManager resolved per-request, so "Run Now" silently did nothing).
+    /// The semaphore just prevents two manual triggers (or a manual trigger
+    /// overlapping the periodic timer tick) from processing pools concurrently;
+    /// it does not skip a run, it only serializes them.
+    /// </summary>
+    public async Task RunNowAsync(CancellationToken ct)
+    {
+        await manualRunLock.WaitAsync(ct);
+
+        try
+        {
+            await ProcessPoolsAsync(ct);
+        }
+        finally
+        {
+            manualRunLock.Release();
+        }
+    }
+
     private void OnPoolStatusNotification(PoolStatusNotification notification)
     {
         if(notification.Status == PoolStatus.Online)
@@ -296,7 +322,15 @@ public class PayoutManager : BackgroundService
             {
                 try
                 {
-                    await ProcessPoolsAsync(ct);
+                    await manualRunLock.WaitAsync(ct);
+                    try
+                    {
+                        await ProcessPoolsAsync(ct);
+                    }
+                    finally
+                    {
+                        manualRunLock.Release();
+                    }
                 }
 
                 catch(OperationCanceledException)
